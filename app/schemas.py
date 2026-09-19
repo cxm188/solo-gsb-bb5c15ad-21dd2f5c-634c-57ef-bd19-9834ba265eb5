@@ -36,6 +36,18 @@ class BatchNameRequest(BaseModel):
     )
 
 
+class ReservationRequest(BaseModel):
+    """预占请求体：名称 + 有效期（30–600 秒）。"""
+
+    name: NameStr = Field(examples=["Аdmin"])
+    ttl_seconds: int = Field(
+        ge=30,
+        le=600,
+        examples=[120],
+        description="预占有效期（秒），范围 30–600；到期未确认即失效",
+    )
+
+
 class ScriptDetail(BaseModel):
     script: str
     characters: list[str]
@@ -47,6 +59,10 @@ class ConflictRecord(BaseModel):
     original_name: str
     normalized_name: str
     reason: Literal["normalized_match", "confusable"]
+    # 冲突来源：已注册名称（默认，向后兼容）或仍有效的预占
+    source: Literal["registered", "reservation"] = "registered"
+    # 仅 source == "reservation" 时出现：预占过期时刻（UTC ISO 8601）
+    expires_at: str | None = None
 
 
 class AnalysisResult(BaseModel):
@@ -68,6 +84,27 @@ class NameRecord(BaseModel):
     original_name: str
     normalized_name: str
     created_at: str
+
+
+class ReservationRecord(BaseModel):
+    """预占成功响应：不可猜测的确认 token 与 UTC 过期时刻。"""
+
+    id: int
+    namespace: str
+    original_name: str
+    normalized_name: str
+    token: str
+    ttl_seconds: int
+    expires_at: str
+    created_at: str
+
+
+class ClaimedNameRecord(NameRecord):
+    """确认预占成功响应：已注册名称记录 + 消费掉的预占信息。"""
+
+    token: str
+    expires_at: str
+    consumed_at: str
 
 
 class BatchItemRecord(NameRecord):
