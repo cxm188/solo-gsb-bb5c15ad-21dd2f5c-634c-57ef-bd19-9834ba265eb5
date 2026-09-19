@@ -3,6 +3,11 @@
 数据库路径通过环境变量 DATABASE_PATH 配置，默认 ./names.db。
 表结构对 (namespace, normalized_name) 做唯一约束，在数据库层面
 兜底规范名重复；同形字符（confusable）判定在应用层完成。
+
+name_reservations 为预占表：未消费（consumed = 0）且未过期
+（expires_at > 当前时间）的预占与 display_names 中的已注册名称
+一样参与冲突判定。部分唯一索引在数据库层兜底同一命名空间下
+有效预占的规范名重复；过期记录由应用惰性删除。
 """
 from __future__ import annotations
 
@@ -23,6 +28,25 @@ CREATE TABLE IF NOT EXISTS display_names (
 
 CREATE INDEX IF NOT EXISTS idx_display_names_namespace
     ON display_names (namespace);
+
+CREATE TABLE IF NOT EXISTS name_reservations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    namespace       TEXT NOT NULL,
+    token           TEXT NOT NULL UNIQUE,
+    original_name   TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    consumed        INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_name_reservations_active
+    ON name_reservations (namespace, normalized_name, expires_at);
+
+-- 同一命名空间下只允许一条未消费且未过期的有效预占占用同一规范名
+CREATE UNIQUE INDEX IF NOT EXISTS uq_name_reservations_active
+    ON name_reservations (namespace, normalized_name)
+    WHERE consumed = 0;
 """
 
 
